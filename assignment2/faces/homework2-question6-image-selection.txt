@@ -1,0 +1,22 @@
+CAP-6619 Fall 2018
+Homework 2, question 6
+How images were selected
+
+Source of these images: http://www.cs.cmu.edu/~tom/faces.html.
+
+Goal: select 50 images from each category. The chosen categories are "straight" and "up".
+
+0) cd to the directory where the images will go
+1) Copied all *straight*_2* images (the 64 x 60 set)
+     cp `find ~/Downloads/faces/ -name '*straight*_2*'` .
+2) Removed all *sunglasses* to pare it down quickly
+     rm *sunglasses*
+3) Removed some samples to get closer to 50:
+     rm kk49* an2i* sz24* megak* night* choon* kawa*
+4) Checked how many images we have left with "ls -l | wc"
+     Note that wc has to return 51 (not 50) because of the total line from "ls -l"
+5) If we have more than 50, run "ls -lrt" and remove the images at the bottom
+   of the list to get down to 50 images
+
+Repeat the above for "cp `find ~/Downloads/faces/ -name '*straight*_2*'` ."
+

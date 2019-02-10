@@ -1,0 +1,533 @@
+---
+title: "CAP-6619 Homework 3, question 5"
+author: Christian Garbin
+date: Fall 2018
+note: This code follows the tidyverse styleguide http://style.tidyverse.org/ (except when using
+      snippets from other sources)
+output: html_notebook
+---
+
+Setup the environment.
+
+```{r error=TRUE, warning=TRUE}
+# Always start with a clean environment to avoid subtle bugs
+rm(list = ls())
+
+# To get repeatable results with random numbers (easier to debug multiple runs)
+# Note: only works when running the notebook from the top. When running cells individually,
+# add this line to each cell.
+# IMPORTANT: results and conclusions below depend highly on this value. Because we work with small
+# data sets and don't use advanced validation mechanisms during training (e.g. folding validation
+# data sets), small changes in random values may affect the results enough to change some of the
+# conclusions.
+set.seed(123)
+
+setwd("~/fau/cap6619/assignments/assignment3")
+
+```
+
+Define colors once to use them consistently in the different graphs (a contrasting scheme that is
+suitable for colorblind readers).
+
+```{r error=TRUE, warning=TRUE}
+# Our labels are -1 and 1, so we don't use the black color, but we need it for a continuous vector
+colors <- c("cadetblue", "black", "darkorange")
+kernel_color <- "brown"
+```
+
+Libraries.
+
+```{r error=TRUE, warning=TRUE}
+#install.packages("mlbench")
+library(mlbench)
+
+# For pseudoinverse function
+#install.packages("corpcor")
+library("corpcor")
+```
+
+# Dataset generation
+
+***
+> Please use MLBENCH to generate a two-class “circle” dataset (with 500 instances). Please show all
+> 500 instances in one plot and color instances according to the class label they belonging to.
+
+***
+
+Generate the data set.
+
+```{r error=TRUE, warning=TRUE}
+circle <- mlbench.circle(500, 2)
+```
+
+Convert class labels from "1" and "2" to "1" and "-1".
+
+The RBF prediction code relies on `sign()` to classify the samples, so we need to transform the two labels into
+a positive one and a negative one.
+
+```{r error=TRUE, warning=TRUE}
+labels <- sign(as.numeric(circle$classes) - 1.5)
+```
+
+Transform the `circle` dataset from a list to a dataframe, using the new labels.
+
+```{r error=TRUE, warning=TRUE}
+circle <- data.frame(cbind(circle$x[, 1:2], labels))
+circle
+```
+
+Split into a training set and a test set.
+
+```{r error=TRUE, warning=TRUE}
+train_index <- sample(nrow(circle), nrow(circle) * 0.3)
+training_set <- circle[train_index,]
+test_set <- circle[-train_index,]
+```
+
+Plot the entire data set.
+
+```{r error=TRUE, warning=TRUE}
+plot(circle$V1~circle$V2, col = colors[circle$labels[] + 2])
+```
+
+
+# RBF training and prediction
+
+***
+
+> Please split the generated “circle” dataset into 30% training vs. 70% test datasets. Train an RBF
+> netowrk (using Gaussian RBF kernel and =1), and validate the classification accuracy on the test
+> dataset. Please report the classification results (including confusion matrix and accuracy) with
+> respect to 2 centers, 5 centers, and 10 centers [1 pts]. 
+
+> Please also color-code and show all training and test instances in the same plot, and also mark
+> RBF centers and misclassified instances [1pt].
+
+***
+
+## RBF functions
+
+RBF training function.
+
+Note: the earliest reference I can find for this implementation is
+[here](http://www.di.fc.ul.pt/~jpn/r/PRML/chapter6.html#radial-basis-function-networks-section-6.3).
+It points to Bishop’s _Pattern Recognition and Machine Learning_ (2009), chapter 6 as the original
+source for the algorithms.
+
+```{r error=TRUE, warning=TRUE}
+#' Create an RBF model.
+#'
+#' @param X observations X=(x1, ..., xN)
+#' @param Y output value (label) for each observation Y = (y1, ..., yN)
+#' @param K number of centers K
+#' @param gamma gamma value
+#'
+#' @return List with number of kernels, weights, centers, gamma and the kmeans results
+rbf <- function(X, Y, K=5, gamma=1.0) {
+  N <- dim(X)[1] # number of instances
+  
+  repeat {
+    km <- kmeans(X, K)  # let's cluster K centers out of the dataset
+    if (min(km$size) > 0) # only accept if there are no empty clusters
+      break
+  }
+  mus <- km$centers # the clusters points
+
+  Phi <- matrix(rep(NA,(K + 1) * N), ncol = K + 1)
+  for (lin in 1:N) {
+    Phi[lin,1] <- 1    # bias column
+    for (col in 1:K) {
+      Phi[lin,col + 1] <- exp(-gamma * norm(as.matrix(X[lin,] - mus[col,]), "F")^2)
+    }
+  }
+  w <- pseudoinverse(Phi) %*% matrix(as.numeric(Y))  # find RBF weights
+  list(kernels = K, weights = w, centers = mus, gamma = gamma, kmeans = km)  # return the rbf model
+}
+```
+
+RBF prediction function.
+
+```{r error=TRUE, warning=TRUE}
+#' Calculate predictions for a test set using an RBF model.
+#'
+#' @param model A model created by the rbf function
+#' @param X  A test set
+#' @param classification TRUE to classify (label) results, FALSE for regression
+#'
+#' @warning The classification code assumes there are two labels, distinguised by the sign of the
+#'          the results, i.e. positive values are classified as "1" and negative values as "-1".
+#'
+#' @return The predictions for the test set, using the model
+rbf.predict <- function(model, X, classification=FALSE) {
+  gamma   <- model$gamma
+  centers <- model$centers
+  w       <- model$weights
+  N       <- dim(X)[1]    # number of observations
+  
+  pred <- rep(w[1],N)  # we need to init to a value, so let's start with the bias
+  for (j in 1:N) {
+    # find prediction for point xj
+    for (k in 1:length(centers[,1])) {
+      # the weight for center[k] is given by w[k+1] (because w[1] is the bias)
+      pred[j] <- pred[j] + w[k + 1] * exp(-gamma * norm(as.matrix(X[j,] - centers[k,]), "F")^2)
+    }
+  }
+  
+  if (classification) {
+    pred <- unlist(lapply(pred, sign))
+  }
+  return(pred)
+}
+```
+
+## RBF prediction and accuracy
+
+A function to run tests with different kernel sizes: creates the RBF model, calculates predictions,
+confusion matrix and accuracy.
+
+```{r error=TRUE, warning=TRUE}
+#' Run an RBF test cycle: generate the model, calculate predictions, confusion matrix and
+#' accuracy.
+#'
+#' @param kernels Number of kernels to user for the test
+#' @param training_set Number of kernes to user for the test
+#' @param test_set Number of kernes to user for the test
+#'
+#' @warning Assumes that the class labels are the last column in the training and test data sets.
+#'
+#' @return A list with the results: the RBF model ("model"), predictions ("predictions"), confusion
+#'         matrix ("cm") and accuracy ("accuracy"), and also the data used to generate the model
+#'         and predictions: "train_features", "train_labels", "test"_features", "test_labels".
+execute_rbf_test <- function(kernels, training_set, test_set) {
+  # Split features from labels
+  class_index <- dim(training_set)[2]
+  training_set_features <- training_set[,-class_index]
+  training_set_labels <- training_set[,class_index]
+  test_set_features <- test_set[,-class_index]
+  test_set_labels <- test_set[,class_index]
+
+  # Calculate the RBF model and the results from that model when applied to the test set
+  rbf_model <- rbf(training_set_features, training_set_labels, kernels)
+  predictions <- rbf.predict(rbf_model, test_set_features, TRUE)
+  cm <- table(test_set_labels, predictions)
+  accuracy <- sum(diag(cm)) / sum(cm)
+
+  # Calculate accuracy on the *training* set
+  # This will be used later to check if the network is overfitting (better results in the training
+  # set than in the test set)
+  # It would be better to use a validation set for this, but in this simplified case we will make it
+  # do with the training data vs. test data
+  predictions_training <- rbf.predict(rbf_model, training_set_features, TRUE)
+  cm_training <- table(training_set_labels, predictions_training)
+  accuracy_training <- sum(diag(cm_training)) / sum(cm_training)
+  
+  list(model = rbf_model, predictions = predictions, cm = cm,
+       accuracy = accuracy, accuracy_training = accuracy_training,
+       train_features = training_set_features, train_labels = training_set_labels,
+       test_features = test_set_features, test_labels = test_set_labels)
+}
+```
+
+A function to display results from a test.
+
+```{r error=TRUE, warning=TRUE}
+#' Display results from an RBF test cycle.
+#'
+#' @param results The results from the test cycle (a list with model, predicitons, etc.)
+display_test_results <- function(results) {
+  kernels = dim(results$model$centers)[1]
+  cat("Results for", kernels, "kernels\n\n")
+  
+  print(results$cm)
+
+  accuracy_text <- sprintf("RBF accuracy: %.4f, kernels: %d", results$accuracy, kernels)
+  cat("\n", accuracy_text)
+
+  # Plot training and test data
+  plot(results$train_features[,]$V1, results$train_features[,]$V2, xlim = c(-1,1), ylim = c(-1,1), 
+       col = colors[results$train_labels[] + 2])
+  points(results$test_features[,1], results$test_features[,2],
+         col = colors[results$test_labels[] + 2], pch = 0)
+
+  # Plot predicted labels (for test data) - mismatches will be shown as a square with a cross of a
+  # a different color inside (same color = label and prediction match)
+  points(results$test_features[,1], results$test_features[,2],
+         col = colors[results$predictions[] + 2], pch = 3)
+  
+  # Plot the calculated center of the kernels
+  points(results$model$centers, col = kernel_color, pch = 19, cex = 2)
+  
+  # Add legend and title
+  legend("topleft",  legend = c("label","prediction"), pch = c(0,3))
+  title(accuracy_text)
+}
+```
+
+### 2 kernels
+
+```{r error=TRUE, warning=TRUE}
+results_rbf2 = execute_rbf_test(2, training_set, test_set)
+display_test_results(results_rbf2)
+```
+
+### 5 kernels
+
+```{r error=TRUE, warning=TRUE}
+results_rbf5 = execute_rbf_test(5, training_set, test_set)
+display_test_results(results_rbf5)
+```
+
+### 10 kernels
+
+```{r error=TRUE, warning=TRUE}
+results_rbf10 = execute_rbf_test(10, training_set, test_set)
+display_test_results(results_rbf10)
+```
+
+# `neuralnet` training and prediction
+
+***
+> For the same “circle” dataset (with 30% training vs. 70% test), please train a two hidden layer
+> neural networks (with 5 hidden nodes for each layer) to validate its classification accuracy on
+> the 70% test instances (report confusion matrix and accuracy) [1 pt].
+
+***
+
+Train the neural network using only a small number of repetitions. Number of repetitions wasn't specificied in the problem statement, so chose a small number that is representative of what we
+would choose for a small test set (to avoid overfitting).
+
+```{r error=TRUE, warning=TRUE}
+library(neuralnet)
+classifier_nn <- neuralnet(labels ~ V1 + V2, training_set, hidden = c(5, 5), rep = 3)
+```
+
+Predict the results using the test data.
+
+```{r error=TRUE, warning=TRUE}
+#' Calculate results for a neuralnet::classifier
+#'
+#' @param classifier The neuralnet:classifier
+#' @param data_set The data set to use in the calculations
+#' @param class_index The index of the class column in that data set
+#'
+#' @return A list with predicted classes, confusion matrix and accuracy for the data set
+calculate_nn_results <- function(classifier, data_set, class_index) {
+  predicted_best <- compute(classifier_nn, data_set[, -class_index],
+                            rep = which.min(classifier$result.matrix["error", ]))
+
+  # Change to labels (assumes two classes: -1 and 1)
+  predicted <- sign(predicted_best$net.result)
+  
+  actual <- data_set[, class_index]
+  cm <- table(predicted, actual)
+
+  accuracy <- (sum(diag(cm))) / sum(cm)
+  
+  list(predictions = predicted, cm = cm, accuracy = accuracy)
+}
+```
+
+Show prediction results.
+
+```{r error=TRUE, warning=TRUE}
+results_nn <- calculate_nn_results(classifier_nn, test_set, dim(test_set)[2])
+
+print(results_nn$cm)
+cat("\nAccuracy: ", results_nn$accuracy, "\n\n")
+```
+
+# RBF vs. neural network accuracy
+
+## RBF accuracy in the "square in a circle" problem as the number of kernel increases
+
+While comparing the RBF network with 10 kernels with `neuralnet`, as requested in the homework, it turned out that the neural network is slightly better (depending on the inital for `set.seed()`).
+
+A possible explanation is that the data set we have is suitable for an RBF network with a small
+number of kernels. In other words, as we increase the number of kernels the RBF network starts
+to overfit.
+
+The data set we have was created with `mlbench.circle`. The [description of that function](https://www.rdocumentation.org/packages/mlbench/versions/2.1-1/topics/mlbench.circle)
+says:
+
+> _This is a 2-class problem: The first class is a d-dimensional ball in the middle of the cube,
+> the remainder forms the second class._
+
+This can be interpreted as: there is a cluster centered in the middle of the circle (since we are
+in a 2D space in this case), then random data spread around the remainder space. An RBF network
+that finds that one cluster would be able to classify the data almost perfectly.
+
+We are using k-means to find the kernels. In such a distribution k-means will not perform well as
+we add more clusters. References: [this article in R-bloggers](https://www.r-bloggers.com/k-means-clustering-is-not-a-free-lunch/)
+and [this discussion in stats-stackexchange](https://stats.stackexchange.com/questions/133656/how-to-understand-the-drawbacks-of-k-means)
+(which inludes pieces of the R-blogger article).
+
+To verify if we are falling into those cases, the graph below shows the accuracy of the RBF network
+using a growing number of kernels.
+
+First train and predict with different number of kernels.
+
+```{r error=TRUE, warning=TRUE}
+# WARNING: this will take a while to run
+max_kernels <- 100
+kernel_numbers = as.list(numeric(max_kernels))
+accuracy_test = as.list(numeric(max_kernels))
+accuracy_training = as.list(numeric(max_kernels))
+
+for (i in c(1,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100)) {
+  kernel_numbers[[i]] <- i
+  results <- execute_rbf_test(i, training_set, test_set)
+  accuracy_test[[i]] <- results$accuracy
+  accuracy_training[[i]] <- results$accuracy_training
+}
+```
+
+Now we plot accuracy vs. number of kernels. The graph shows the accuracy on the test set in orange
+and accuracy on the training set in blue 
+
+While the training set accuracy remains high, the accuracy on the training set decreases as we use
+more kernels. This is an indication of overfitting. The more kernels we use, the bigger the chance
+the network will overfit.
+
+```{r error=TRUE, warning=TRUE}
+plot(kernel_numbers, accuracy_test, xlim = c(0, max_kernels), ylim = c(0.8, 1), pch = 19,
+     col = "darkorange", ylab = "Accuracy", xlab = "Number of kernels")
+points(kernel_numbers, accuracy_training, pch = 19, col = "cadetblue")
+```
+
+The training vs. test accuracy for the specific cases in question 5, the RBF network with ten
+kernels and the neural network with two hidden layers (five neurons in each layer) is shown below.
+
+```{r error=TRUE, warning=TRUE}
+print("RBF training vs. test accuracy - ten kernels")
+cat("Training: ", results_rbf10$accuracy_training, ", test:", results_rbf10$accuracy)
+```
+
+```{r error=TRUE, warning=TRUE}
+results_nn_training <- calculate_nn_results(classifier_nn, training_set, dim(training_set)[2])
+print("Neural network training vs. test accuracy")
+cat("Training: ", results_nn_training$accuracy, ", test:", results_nn$accuracy)
+```
+
+## RBF vs. neural network decision boundaries
+
+To further understand the differences between the RBF and the neural network behavior the code below
+shows the decision boundaries of each network.
+
+Each plot shows the decision boundaries and the full data set (training and test data). The code to
+plot the decision boundaries was based on [this GitHub gist](https://gist.github.com/cgarbin/7451cf59a9572b427e50735f3b838dbd), which in turn was based on
+[this post](http://michael.hahsler.net/SMU/EMIS7332/R/viz_classifier.html).
+
+To help understand if the classifiers are over- or underfitting, test and training data is plotted
+with different shapes:
+
+* Training data: open circles
+* Test data: solid circles
+
+Decision boindaries that are close to the structure of the underlying data set (a circle) will
+generally perform better because they will overfit less (will generalize better). Decision
+boundaries that deviate from a general circle pattern will perform worse.
+
+First an auxiliary function to create a grid that will be used to plot the decision boundaries.
+
+```{r error=TRUE, warning=TRUE}
+#' Create a 2D grid that encompasses all values in the given data set (also a 2D data set).
+#'
+#' @param points_per_axis How many points per axis the grid must have
+#' @param data_set The 2D data.frame with the data the grid has to encompass (the training or test
+#'                 features, without the labels)
+#'
+#' @return A data.frame representing the grid, with the standard column names (V1, V2)
+create_grid <- function(points_per_axis, data_set) {
+  # The range of values in the data set, i.e. the max/min values for the axis
+  # First row is the left/bottom of the axis, second row is the top/right
+  max_values <- sapply(data_set, range, na.rm = TRUE)
+
+  # Vector with the requested number of points spanning each axis
+  x_axis <- seq(max_values[1,1], max_values[2,1], length.out = points_per_axis)
+  y_axis <- seq(max_values[1,2], max_values[2,2], length.out = points_per_axis)
+
+  # Combine each value in the axis with all possible values in the other axis (grid matrix)
+  grid <- cbind(rep(x_axis, each = points_per_axis), rep(y_axis, times = points_per_axis))
+  # Then change to a data frame (note: using the standard column names - adjust if needed)
+  grid <- as.data.frame(grid)
+}
+
+grid <- create_grid(100, circle[c("V1","V2")])
+```
+
+### RBF decision boundaries
+
+A function to show the decision grid for an RBF model generated by `execute_rbf_test`.
+
+```{r error=TRUE, warning=TRUE}
+#' Show decision boundaries for an RBF model
+#'
+#' @param results_rbf The results object returned from a call to `execute_rbf_test`
+show_decision_boundary_rbf <- function(results_rbf) {
+  # Predict the label of every point in the grid
+  predictions <- rbf.predict(results_rbf$model, grid, TRUE)
+  
+  # Plot training data as open circles
+  plot(training_set$V1, training_set$V2, col = colors[training_set$labels + 2], pch = 1)
+  # Plot the decision boundaries next so they are in the background
+  points(grid, col = colors[predictions + 2], pch = ".")
+  # Plots the centers next, so we can see the test data on top of it later (where it overlaps)
+  points(results_rbf$model$centers, col = kernel_color, pch = 19, cex = 2)
+  # Plot test data as solid circles
+  points(test_set$V1, test_set$V2, col = colors[test_set$labels + 2], pch = 20)
+
+  title(sprintf("Decision boundaries - kernels: %d", results_rbf$model$kernels))
+}
+```
+
+This is the decision boundary for one kernel. It was not part of the homework, but given our data
+set (a circle), one kernel is one of the best solutions (assuming the algorithm finds the right
+center for that kernel). Visualizing that best solution helps analyze the other cases.
+
+```{r error=TRUE, warning=TRUE}
+results_rbf1 = execute_rbf_test(1, training_set, test_set)
+display_test_results(results_rbf1)
+show_decision_boundary_rbf(results_rbf1)
+```
+
+```{r error=TRUE, warning=TRUE}
+show_decision_boundary_rbf(results_rbf2)
+```
+
+```{r error=TRUE, warning=TRUE}
+show_decision_boundary_rbf(results_rbf5)
+```
+
+```{r error=TRUE, warning=TRUE}
+show_decision_boundary_rbf(results_rbf10)
+```
+
+
+### Neural network decision boundaries
+
+```{r error=TRUE, warning=TRUE}
+#' Show decision boundaries for a neuralnet model.
+#'
+#' @param results_rbf The object returned from a call to `neuralnet::classifier`
+show_decision_boundary_nn <- function(classifier) {
+  # Predict the label of every point in the grid
+  predictions <- compute(classifier, grid, rep = which.min(classifier$result.matrix["error", ]))
+  # Change to labels (assumes two classes: -1 and 1)
+  predictions <- sign(predictions$net.result)
+
+  # Plot training data as open circles
+  plot(training_set$V1, training_set$V2, col = colors[training_set$labels + 2], pch = 1)
+  # Plot the decision boundaries next so they are in the background
+  points(grid, col = colors[predictions + 2], pch = ".")
+  # Plot test data as solid circles
+  points(test_set$V1, test_set$V2, col = colors[test_set$labels + 2], pch = 20)
+
+  title("Decision boundaries - neural network (5,5)")
+}
+```
+
+Predict the results using the grid and the classifier we created for the homework exercise (above).
+
+```{r error=TRUE, warning=TRUE}
+show_decision_boundary_nn(classifier_nn)
+```

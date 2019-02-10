@@ -1,0 +1,256 @@
+---
+title: "CAP-6619 Homework 1, question 8"
+author: Christian Garbin
+date: Fall 2018
+output: html_notebook
+---
+
+Setup the environment.
+
+```{r error=TRUE, warning=TRUE}
+# Always start with a clean environment to avoid subtle bugs
+rm(list = ls())
+
+# To get repeatable results with random numbers (easier to debug multiple runs)
+set.seed(123) 
+
+setwd("~/fau/cap6619/assignments/assignment1")
+```
+
+# Load data
+
+Read both files and combine into one data set.
+
+```{r error=TRUE, warning=TRUE}
+INSTANCES_PER_FILE <- 100
+TOTAL_INSTANCES <- INSTANCES_PER_FILE * 2
+
+# Read input data, add class (label)
+read_file <- function(filename, label) {
+    f <- read.table(filename, header = TRUE, sep = ",")
+    f.label <- rep(label, INSTANCES_PER_FILE)
+    f <- cbind(f, f.label)
+    names(f) <- c("weight", "height", "label")
+    return(f)
+}
+
+class1 <- read_file("Class1.txt", 1)
+class2 <- read_file("Class2.txt", -1)
+
+class1.2 <- rbind(class1,class2)
+d.set <- data.frame(cbind(rep(1,TOTAL_INSTANCES),class1.2))
+names(d.set) <- c("bias","weight","height","label")
+#d.set
+```
+
+
+# Random training/test sets
+
+***
+> *Please randomly select 80% instances from class1.txt and 80% instances from class2.txt to
+> train a perceptron classifier (using gradient descent learning rule), and use the classifier
+> to classify remaining 20% instances in class1.txt and class2.txt.*
+
+***
+
+Split 80% of each class into a training set and the remaining 20% into a test set. Random samples
+are extracted from each file.
+
+```{r error=TRUE, warning=TRUE}
+# Split into training (80%) and test (20%) sets
+# Note that we will use the same indices for for class 1 and class 2 to simplify the code a bit
+train_size <- floor(0.8 * nrow(class1)) # number of training rows (from each class)
+test_size <- nrow(class1) - train_size # number of test rows (from each class)
+
+# Random entries from each class
+train_ind <- sample(seq_len(nrow(class1)), size = train_size)
+
+# Class 1 train and test
+class1_train <- class1[train_ind, ]
+class1_test <- class1[-train_ind, ]
+
+# Class 2 train and test
+class2_train <- class2[train_ind, ]
+class2_test <- class2[-train_ind, ]
+```
+
+Combine the classes into one training and one test data set, then randomize the combined data sets
+to spread the class 1 and class 2 samples around. See [this SO discussion](https://datascience.stackexchange.com/questions/24511/why-should-the-data-be-shuffled-for-machine-learning-tasks) and [this post](https://machinelearningmastery.com/randomness-in-machine-learning/) on why shuffling is needed.
+
+```{r error=TRUE, warning=TRUE}
+class1.2_train <- rbind(class1_train, class2_train)
+d_train.set <- data.frame(cbind(rep(1, 2 * train_size), class1.2_train))
+names(d_train.set) <- c("bias", "weight", "height", "label")
+samples_train <- sample(nrow(d_train.set))
+randomized_train.set <- d_train.set[samples_train, ]
+
+class1.2_test <- rbind(class1_test, class2_test)
+d_test.set <- data.frame(cbind(rep(1, 2 * test_size), class1.2_test))
+names(d_test.set) <- c("bias", "weight", "height", "label")
+samples_test <- sample(nrow(d_test.set))
+randomized_test.set <- d_test.set[samples_test, ]
+```
+
+At this point we have these data sets:
+
+* `d.set`: all samples, from both files, in the order read from the file
+* `randomized_train.set`: 80% of class 1 + 80% of class 2, in random order
+* `randomized_test.set`: 20% of class 1 + 20% of class 2, in random order
+
+# Gradient descent rule
+
+The function that implements the Gradient Descent Rule.
+
+```{r error=TRUE, warning=TRUE}
+gradient <- function(x, eta, niter, threshold) {
+    weight <- runif(dim(x)[2] - 1,-1,1)
+    errors <- rep(0, niter)
+    label.index <- length(x[1,])
+    features <- x[,-label.index]
+    labels <- x[,label.index]
+    
+    # Loop over number of epochs niter
+    jj <- 1
+    err.value <- 10 # start with an error above the desired threshold
+    while (jj < niter && err.value > threshold) {
+        
+        # Print progress every so often - this may take a while
+        if (jj %% 400 == 0) print(jj)
+        
+        delta.weight <- rep(0,dim(x)[2] - 1)
+        # Loop through training data set
+        squared.error <- 0
+        for (ii in 1:nrow(x)) {
+            # Prediction
+            z <- sum(weight[1:length(weight)] * as.numeric(features[ii,]))
+            weightdiff <- eta * (as.numeric(labels[ii]) - z) * as.numeric(features[ii,])
+            delta.weight <- delta.weight + weightdiff
+            
+            # Update error rate
+            squared.error <- squared.error + 
+                (as.numeric(labels[ii]) - z) * (as.numeric(labels[ii]) - z)
+        }
+        errors[jj] <- squared.error/nrow(x)/2
+        err.value <- errors[jj]
+        weight <- weight + delta.weight/nrow(x)
+        jj <- jj + 1
+    }
+    
+    # weight to decide between the two species 
+    #print(weight)
+    #print(errors)
+    return(list(v1 = weight,v2 = errors))
+}
+```
+
+# Training phase
+
+Train the neuron (calculate weights using training data).
+
+```{r error=TRUE, warning=TRUE}
+iterations <- 2000
+learning_rate = 0.05
+threshold = 0.1
+train.weight.err <- gradient(randomized_train.set, learning_rate, iterations, threshold)
+```
+
+# Predictions and accuracy
+
+***
+> *Please report the classification accuracy of the perceptron classifier on the 20% test
+> instances (using learning rate 0.05, error threshold 0.1, and iteration numbers 2000)*
+
+***
+
+Function to predict labels, given the set of test data and weights previously calculated.
+
+```{r error=TRUE, warning=TRUE}
+predict <- function(test,weight) {
+    # number of test instances
+    test.dimension <- dim(test)
+    test.num <- test.dimension[1]
+    # predicted labels
+    pred.labels <- rep(0, test.num)
+    # create biase for each instance
+    biase <- rep(1,test.num)
+    biase <- data.frame(biase)
+    test <- cbind(biase,test)
+    for (ii in 1:test.num) {
+        z <- sum(weight[1:length(weight)] * as.numeric(test[ii,])) 
+        pred.labels[ii] <- ifelse(z > 0,1,-1)
+    }
+    return(pred.labels)
+}
+```
+
+Predict the labels of the test data we set aside ealier.
+
+```{r error=TRUE, warning=TRUE}
+test.features <- randomized_test.set[,2:3]
+predictions <- predict(test.features,train.weight.err$v1)
+predictions
+```
+
+Calculate a confusion matrix for the predicted data.
+
+```{r error=TRUE, warning=TRUE}
+cm <- table(randomized_test.set[,4],predictions)
+cm
+```
+
+Calculate accuracy.
+
+```{r error=TRUE, warning=TRUE}
+acc <- (cm[1][1] + cm[4][1])/sum(cm)
+caption <- sprintf("Accuracy: %.4f",acc)
+caption
+```
+
+# Training and test errors
+
+***
+> *Please report the training errors and test errors of the perceptron classifier with respect to
+> each iteration. Please show the two error rates on the same chart, where the x-axis denotes the
+> iteration and the y-axis denotes the mean classification errors*
+
+***
+
+Calculate test errors (we already have training from above).
+
+```{r error=TRUE, warning=TRUE}
+test.weight.err <- gradient(randomized_test.set, learning_rate, iterations, threshold)
+```
+
+Plot training (red) and test (blue) errors on the same graph.
+
+```{r error=TRUE, warning=TRUE}
+maxy = ceiling(max(train.weight.err$v2, test.weight.err$v2))
+plot(1:iterations, train.weight.err$v2, col = "red", ylim = c(0, maxy),
+     xlab = "", ylab = "")
+par(new = TRUE)
+plot(1:iterations, test.weight.err$v2, col = "blue", ylim = c(0, maxy), 
+  xlab = "Iteration number", ylab = "Error"
+)
+legend("bottomleft", legend = c("Train", "Test"), 
+       col = c("red", "blue"),  pch = c(19,19), bty = "n")
+```
+
+# Decision surface
+
+***
+> *Report the final decision surface on the same scatter plot which shows the 200 instances*
+
+***
+
+
+```{r error=TRUE, warning=TRUE}
+# Plot all instances
+plot(d.set[,]$weight,d.set[,]$height,xlim = c(0:1),ylim = c(0:1), 
+     col = c("blue","black","red")[d.set[,]$label + 2],
+     xlab = "Weight", ylab = "Height")
+
+# Add decision surface
+slope <- train.weight.err$v1[2]/train.weight.err$v1[3]*(-1)
+intercept <- train.weight.err$v1[1]/train.weight.err$v1[3]*(-1)
+abline(intercept,slope,col = "green",lty = 2)
+```

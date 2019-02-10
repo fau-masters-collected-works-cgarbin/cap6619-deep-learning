@@ -1,0 +1,12 @@
+.DS_Store
+.RData
+.Rhistory
+*.zip
+
+# Files that are re-created in code
+*.ps
+*.h5
+
+# R noteboks re-created when runnnign code in R Studio
+*.nb.html
+

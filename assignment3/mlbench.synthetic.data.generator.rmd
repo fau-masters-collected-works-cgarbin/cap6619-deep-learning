@@ -1,0 +1,53 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+R Notebook. ML Bench Library (Mlbench) for test and validation. X.Zhu Oct. 1 2018
+
+# please install the library using install.packages("mlbench") in R or use "Tools"->"Install Packages"-> and type "mlbench" as the package name.
+
+```{r}
+library(mlbench)
+
+```
+
+
+```{r}
+normal<-mlbench.2dnormals(500,2)
+plot(normal)
+```
+
+```{r}
+normal<-mlbench.2dnormals(500,3)
+plot(normal)
+
+```
+
+```{r}
+xor<-mlbench.xor(500,2)
+plot(xor)
+```
+
+```{r}
+circle<-mlbench.circle(500,2)
+plot(circle)
+```
+
+```{r}
+circle
+```
+```{r}
+labels<-sign(as.numeric(circle$classes)-1.5)
+labels
+```
+```{r}
+dataset<-data.frame(cbind(circle$x[,1:2],labels))
+dataset
+```
+```{r}
+write.table(dataset,"circle.txt",sep=",",row.names=FALSE)
+```
+

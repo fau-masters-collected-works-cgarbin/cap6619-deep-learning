@@ -1,0 +1,9 @@
+This folder contains different sets of images used in the code:
+
+* fromclass: images from the example we saw in class.
+
+* debug: small set of images to help debug the code.
+
+* all others: different set of images from http://www.cs.cmu.edu/~tom/faces.html.
+  See homework2-question6-image-selection.txt for details on how these images
+  were selected.

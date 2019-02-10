@@ -1,0 +1,162 @@
+---
+title: "CAP-6619 Homework 1, question 7"
+author: Christian Garbin
+date: Fall 2018
+output: html_notebook
+---
+
+Setup the environment.
+
+```{r error=TRUE, warning=TRUE}
+# Always start with a clean environment to avoid subtle bugs
+rm(list = ls())
+
+# To get repeatable results with random numbers (easier to debug multiple runs)
+set.seed(123) 
+
+setwd("~/fau/cap6619/assignments/assignment1")
+```
+
+# Load data
+
+```{r error=TRUE, warning=TRUE}
+INSTANCES_PER_FILE <- 100
+TOTAL_INSTANCES <- INSTANCES_PER_FILE * 2
+
+# Read input data, add class (label)
+read_file <- function(filename, label) {
+    f <- read.table(filename, header = TRUE, sep = ",")
+    f.label <- rep(label, INSTANCES_PER_FILE)
+    f <- cbind(f, f.label)
+    names(f) <- c("weight", "height", "label")
+    return(f)
+}
+
+class1 <- read_file("Class1.txt", 1)
+class2 <- read_file("Class2.txt", -1)
+
+class1.2 <- rbind(class1,class2)
+d.set <- data.frame(cbind(rep(1,TOTAL_INSTANCES),class1.2))
+names(d.set) <- c("bias","weight","height","label")
+d.set
+```
+
+# Instances plot
+
+***
+> *Report the scatter plot of the all 200 instances in the same plot, using different color to show
+> instance in different class*
+
+***
+
+```{r error=TRUE, warning=TRUE}
+plot(d.set[1:100,]$weight,d.set[1:100,]$height,xlim = c(0:1),ylim = c(0:1),col = "red",
+     xlab = "Weight", ylab = "Height")
+points(d.set[101:200,]$weight,d.set[101:200,]$height,col = "blue")
+```
+
+# Training and error rates
+
+***
+> *Use learning rate 0.05 and iteration 500, and report the error rates of the perceptron learning
+> with respect to different iterations (using a plot where the x-axis denotes the iterations, and
+> the y-axis shows the error rate.*
+
+***
+
+This is the perceptron training function.
+
+```{r error=TRUE, warning=TRUE}
+perceptron <- function(x, eta, niter) {
+    
+    weight <- rep(0.1, dim(x)[2] - 1)
+    errors <- rep(0, niter)
+    label.index <- length(x[1,])
+    features <- x[,-label.index]
+    labels <- x[,label.index]
+    
+    # loop over number of epochs niter
+    for (jj in 1:niter) {
+        
+        # loop through training data set
+        for (ii in 1:nrow(x)) {
+            
+            # Predict binary label using activation function
+            z <- sum(weight[1:length(weight)] * as.numeric(features[ii,])) 
+            if (z < 0) {
+                ypred <- -1
+            } else {
+                ypred <- 1
+            }
+            
+            # Change weight - the formula doesn't do anything 
+            # if the predicted value is correct
+            weightdiff <- eta * (as.numeric(labels[ii]) - ypred) * as.numeric(features[ii,])
+            weight <- weight + weightdiff
+            
+            # update error rate
+            if ((as.numeric(labels[ii]) - ypred) != 0.0) {
+                errors[jj] <- errors[jj] + 1
+            }
+        }
+    }
+    
+    # weight to decide between the two species 
+    #print(weight)
+    #print(errors)
+    return(list(v1 = weight,v2 = errors))
+}
+```
+
+Randomize the training data. See [this SO discussion](https://datascience.stackexchange.com/questions/24511/why-should-the-data-be-shuffled-for-machine-learning-tasks) and [this post](https://machinelearningmastery.com/randomness-in-machine-learning/) on why shuffling is needed.
+
+```{r error=TRUE, warning=TRUE}
+samples <- sample(nrow(d.set))
+randomized.set <- d.set[samples,]
+```
+
+Train with the randomized data.
+
+```{r error=TRUE, warning=TRUE}
+iterations <- 500
+weight.err <- perceptron(randomized.set, 0.05, iterations)
+```
+
+Graph the errors.
+
+```{r error=TRUE, warning=TRUE}
+plot(1:iterations, weight.err$v2, xlab = "Iteration", ylab = "Error")
+```
+
+# Weights, slope and intercept
+
+***
+> *Report final weight values and the slope and y-intercept of the decision surface*
+
+***
+
+```{r error=TRUE, warning=TRUE}
+slope <- weight.err$v1[2]/weight.err$v1[3] * (-1)
+intercept <- weight.err$v1[1]/weight.err$v1[3] * (-1)
+
+cat("Weights: ", weight.err$v1, "\n")
+cat("Slope: ", slope, "\n")
+cat("Intercept: ", intercept, "\n")
+```
+
+# Decision surface
+
+***
+> *Report the final decision surface on the same scatter plot which shows the 200 instances*
+
+***
+
+```{r error=TRUE, warning=TRUE}
+# Data set
+plot(d.set[1:100,]$weight,d.set[1:100,]$height,xlim = c(0:1),ylim = c(0:1),col = "red",
+     xlab = "Weight", ylab = "Height")
+points(d.set[101:200,]$weight,d.set[101:200,]$height,col = "blue")
+
+# Decison surface
+abline(intercept,slope,col = "green",lty = 2)
+```

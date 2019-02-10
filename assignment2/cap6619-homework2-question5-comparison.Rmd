@@ -1,0 +1,132 @@
+---
+title: "CAP-6619 Homework 2, question 5 - lines for each iteration"
+author: Christian Garbin
+date: Fall 2018
+output: html_notebook
+---
+
+Shows the lines that represent the different values of the weights that neuralnet() chose during
+training.
+
+The goal is to compare the results from each repetition as an attempt to understand better how
+`neuralnet()` works.
+
+# Setup the environment
+
+```{r error=TRUE, warning=TRUE}
+# Always start with a clean environment to avoid subtle bugs
+rm(list = ls())
+
+# To get repeatable results with random numbers (easier to debug multiple runs)
+# Note: only works when running the notebook from the top. When running cells individually,
+# add this line to each cell.
+set.seed(1234) 
+
+setwd("~/fau/cap6619/assignments/assignment2")
+```
+
+# Load data
+
+```{r error=TRUE, warning=TRUE}
+training_data <- read.table("nine.instances.txt",sep = ",",header = T)
+```
+
+# Train the network
+
+```{r error=TRUE, warning=TRUE}
+library(neuralnet)
+nn <- neuralnet(Label~X1+X2,training_data,hidden = 2,rep = 5)
+```
+
+# Plot lines for each iteration
+
+#### Helper functions
+
+Helper function for intercept and slope calculation.
+
+```{r}
+findinterceptslope <- function(weights) {
+  slope <- weights[2]/weights[3]*(-1)
+  intercept <- weights[1]/weights[3]*(-1)
+  return(list(slope = slope, intercept = intercept))
+}
+```
+
+Helper function to plot the lines of the given iteration.
+
+```{r error=TRUE, warning=TRUE}
+plot_lines <- function(repetition) {
+  # Weights for one repetition (all neurons, including output neuron)
+  weights <- nn$weights[repetition]
+
+  # Weights for the first hidden neuron (at the top)
+  weights_top = weights[[1]][[1]][1:3,1]
+
+  # Weights for the second hidden neuron (at the bottom)
+  weights_bottom = weights[[1]][[1]][1:3,2]
+  
+  # Slope and intercept for the hidden neurons
+  slope_intercept_top = findinterceptslope(weights_top)
+  slope_intercept_bottom = findinterceptslope(weights_bottom)
+
+  # Uncomment to see the raw values
+  #print(repetition)
+  #print(weights_top)
+  #print(weights_bottom)
+  #cat(slope_intercept_top$slope, slope_intercept_top$intercept, "\n")
+  #cat(slope_intercept_bottom$slope, slope_intercept_bottom$intercept, "\n\n")
+
+  # Plot training data and lines (hyperplanes) from the hidden neurons
+  abline(slope_intercept_top$intercept,slope_intercept_top$slope,col = "green",lty = 2)
+  abline(slope_intercept_bottom$intercept,slope_intercept_bottom$slope,col = "blue",lty = 2)
+}
+```
+
+Plots data and lines for the given repetition.
+
+```{r error=TRUE, warning=TRUE}
+plot_repetition <- function(repetition) {
+  header <- paste(repetition, "e=", round(nn$result.matrix["error",repetition],5))
+
+  # xlim and ylim were chose by trial-and-error to allow better visual comparison of the lines  
+  plot(training_data$X1,training_data$X2,col = c("black","red")[training_data$Label + 1],
+       xlim = c(-1.3,1.3),ylim = c(-1.3,1.3), main = header)
+
+  plot_lines(repetition)
+}
+```
+
+#### Side-by-side for comparison
+
+See next session for individual plots.
+
+```{r error=TRUE, warning=TRUE}
+par(mfrow = c(1,5))
+plot_repetition(1)
+plot_repetition(2)
+plot_repetition(3)
+plot_repetition(4)
+plot_repetition(5)
+```
+
+#### Individual plots
+
+```{r error=TRUE, warning=TRUE}
+plot_repetition(1)
+```
+
+```{r error=TRUE, warning=TRUE}
+plot_repetition(2)
+```
+
+```{r error=TRUE, warning=TRUE}
+plot_repetition(3)
+```
+
+```{r error=TRUE, warning=TRUE}
+plot_repetition(4)
+```
+
+```{r error=TRUE, warning=TRUE}
+plot_repetition(5)
+```

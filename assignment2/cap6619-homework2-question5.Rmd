@@ -1,0 +1,193 @@
+---
+title: "CAP-6619 Homework 2, question 5"
+author: Christian Garbin
+date: Fall 2018
+output: html_notebook
+---
+
+Setup the environment.
+
+```{r error=TRUE, warning=TRUE}
+# Always start with a clean environment to avoid subtle bugs
+rm(list = ls())
+
+# To get repeatable results with random numbers (easier to debug multiple runs)
+# Note: only works when running the notebook from the top. When running cells individually,
+# add this line to each cell.
+set.seed(1234) 
+
+setwd("~/fau/cap6619/assignments/assignment2")
+```
+
+# Load and visualize the data
+
+```{r error=TRUE, warning=TRUE}
+training_data <- read.table("nine.instances.txt",sep = ",",header = T)
+training_data
+plot(training_data$X1,training_data$X2,col = c("black","red")[training_data$Label + 1],
+     xlim = c(-2,2),ylim = c(-2,2))
+```
+
+# One hidden layer, two hidden nodes
+
+***
+> Please use Neuralet to train a network with one hidden layer and two hidden nodes. Report
+> decision surface of each hidden node (i.e., the line determined by its weight value). Please
+> show the 9 instances in a plot (show data points in different colors according to their class
+> label) and report the decision surfaces of all hidden nodes in the same plot [1 pt].
+
+***
+
+**NOTE**
+
+In the code blocks below a suffix is used to distinguish between the variables used for the the "2 hidden nodes" and "3 hidden nodes" cases.
+
+* `..._1_2`: one hidden layer, two hidden nodes
+* `..._1_3`: one hidden layer, three hidden nodes
+
+Train the neural network.
+
+```{r error=TRUE, warning=TRUE}
+library(neuralnet)
+nn_1_2 <- neuralnet(Label~X1+X2,training_data,hidden = 2,rep = 5)
+```
+
+Show the error for each repetition.
+
+```{r error=TRUE, warning=TRUE}
+nn_1_2$result.matrix["error",]
+```
+
+Show the weights for the repetition with the smallest error.
+
+```{r error=TRUE, warning=TRUE}
+nn_1_2$weights[which.min(nn_1_2$result.matrix["error",])]
+```
+
+Plot the neural network, using the values for the best reults (smallest error). The hidden layer is shown in red.
+
+```{r error=TRUE, warning=TRUE}
+plot(nn_1_2,rep = "best",col.entry = "green",col.hidden = "red")
+```
+
+Split out the errors for each neuron in the hidden layer. We will use them later to calculate the 
+slope and intercept of the hyperplane that each neuron is "responsible" for.
+
+These weights should match the values shown in the neural network plot (above).
+
+```{r error=TRUE, warning=TRUE}
+# Weights for the repetition that has the smallest error (includes hidden and output layers)
+smallest_error_1_2 = which.min(nn_1_2$result.matrix["error",])
+weights_1_2 <- nn_1_2$weights[smallest_error_1_2]
+
+# Weights for the first hidden neuron (at the top)
+weights_top_1_2 = weights_1_2[[1]][[1]][1:3,1]
+weights_top_1_2
+
+# Weights for the second hidden neuron (at the bottom)
+weights_bottom_1_2 = weights_1_2[[1]][[1]][1:3,2]
+weights_bottom_1_2
+```
+
+Function to find intercept and slope of the line (hyperplane) a neuron is "responsible" for, given the weights for that neuron.
+
+```{r}
+findinterceptslope <- function(weights) {
+  slope <- weights[2]/weights[3]*(-1)
+  intercept <- weights[1]/weights[3]*(-1)
+  return(list(slope = slope, intercept = intercept))
+}
+```
+
+Slope and intercept for the hidden neurons.
+
+```{r warning=TRUE}
+slope_intercept_top_1_2 = findinterceptslope(weights_top_1_2)
+slope_intercept_bottom_1_2 = findinterceptslope(weights_bottom_1_2)
+slope_intercept_top_1_2
+slope_intercept_bottom_1_2
+```
+
+Plot training data and lines (hyperplanes) from the hidden neurons.
+
+```{r}
+plot(training_data$X1,training_data$X2,col = c("black","red")[training_data$Label + 1],
+     xlim = c(-2,2),ylim = c(-2,2))
+abline(slope_intercept_top_1_2$intercept,slope_intercept_top_1_2$slope,col = "green",lty = 2)
+abline(slope_intercept_bottom_1_2$intercept,slope_intercept_bottom_1_2$slope,col = "blue",lty = 2)
+```
+
+# One hidden layer, three hidden nodes
+
+***
+Please use Neuralet to train a network with one hidden layer and three hidden nodes. Report decision surface of each hidden node (i.e., the line determined by its weight value). Please show the 9 instances in a plot (show data points in different colors according to their class label) and report the decision surfaces of all hidden nodes in the same plot [1 pt].
+
+***
+
+Train the neural network.
+
+```{r error=TRUE, warning=TRUE}
+library(neuralnet)
+nn_1_3 <- neuralnet(Label~X1+X2,training_data,hidden = 3,rep = 5)
+```
+
+Show the error for each repetition.
+
+```{r error=TRUE, warning=TRUE}
+nn_1_3$result.matrix["error",]
+```
+
+Show the weights for the repetition with the smallest error.
+
+```{r error=TRUE, warning=TRUE}
+nn_1_3$weights[which.min(nn_1_3$result.matrix["error",])]
+```
+
+Plot the neural network, using the values for the best reults (smallest error). The hidden layer is shown in red.
+
+```{r error=TRUE, warning=TRUE}
+plot(nn_1_3,rep = "best",col.entry = "green",col.hidden = "red")
+```
+
+Split out the errors for each neuron in the hidden layer. We will use them later to calculate the slope and intercept of the hyperplane that each neuron is "responsible" for.
+
+These weights should match the values shown in the neural network plot (above).
+
+```{r error=TRUE, warning=TRUE}
+# Weights for the repetition that has the smallest error (includes hidden and output layers)
+smallest_error_1_3 = which.min(nn_1_3$result.matrix["error",])
+weights_1_3 <- nn_1_3$weights[smallest_error_1_3]
+
+# Weights for the first hidden neuron (at the top)
+weights_top_1_3 = weights_1_3[[1]][[1]][1:3,1]
+weights_top_1_3
+
+# Weights for the second hidden neuron (middle)
+weights_middle_1_3 = weights_1_3[[1]][[1]][1:3,2]
+weights_middle_1_3
+
+# Weights for the third hidden neuron (bottom)
+weights_bottom_1_3 = weights_1_3[[1]][[1]][1:3,3]
+weights_bottom_1_3
+```
+
+Slope and intercept for the hidden neurons.
+
+```{r warning=TRUE}
+slope_intercept_top_1_3 = findinterceptslope(weights_top_1_3)
+slope_intercept_middle_1_3 = findinterceptslope(weights_middle_1_3)
+slope_intercept_bottom_1_3 = findinterceptslope(weights_bottom_1_3)
+slope_intercept_top_1_3
+slope_intercept_middle_1_3
+slope_intercept_bottom_1_3
+```
+
+Plot training data and lines (hyperplanes) from the hidden neurons.
+
+```{r}
+plot(training_data$X1,training_data$X2,col = c("black","red")[training_data$Label + 1],
+     xlim = c(-2,2),ylim = c(-2,2))
+abline(slope_intercept_top_1_3$intercept,slope_intercept_top_1_3$slope,col = "green",lty = 2)
+abline(slope_intercept_middle_1_3$intercept,slope_intercept_middle_1_3$slope,col = "blue",lty = 2)
+abline(slope_intercept_bottom_1_3$intercept,slope_intercept_bottom_1_3$slope,col = "darkgray",lty = 2)
+```
