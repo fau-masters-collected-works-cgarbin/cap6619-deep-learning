@@ -1,6 +1,6 @@
-# CAP-5615 Intro to Neural Networks class at FAU
+# CAP-6619 Deep Learning class at FAU
 
-Assignments from the CAP-5615 Intro to Neural Networks at Florida Atlantic University, Summer 2018
+Assignments from the CAP-6619 Deep Learning at Florida Atlantic University, Fall 2018
 
 ## Assignment 1
 
